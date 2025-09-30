@@ -1,0 +1,225 @@
+import React, { useState } from "react";
+
+type DocumentStatus = "Pending" | "Approved" | "Rejected";
+
+interface CrewDocument {
+  id: number;
+  crewName: string;
+  documentType: string;
+  status: DocumentStatus;
+  uploadDate: string;
+  pdfUrl?: string;
+  name?: string;
+}
+
+// Use a free sample PDF from w3.org for preview
+const samplePdf = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+
+const approvalConditions: Record<string, string> = {
+  "LATEST PASSPORT": "...",
+  "CREW ID CARD": "...",
+  "TRANSFER LETTER": "...",
+  "INITIAL CREW CONTRACT": "...",
+  "RENEWAL CREW CONTRACT": "...",
+  "PROMOTION LETTER": "...",
+  "PHOTOGRAPH PASSPORT SIZE": "...",
+  "EDUCATION CERTIFICATE": "...",
+  "AAHAR CARD": "...",
+  "PAN CARD": "...",
+};
+
+const documentTypes = Object.keys(approvalConditions);
+
+const mockData: CrewDocument[] = Array.from({ length: 20 }, (_, i) => ({
+  id: i + 1,
+  crewName: `Crew Member ${i % 5 + 1}`,
+  documentType: documentTypes[i % documentTypes.length],
+  status: "Pending",
+  uploadDate: `2025-09-${(i % 30) + 1}`,
+  pdfUrl: samplePdf,
+  name: `Crew Member ${i % 5 + 1}`,
+}));
+
+const CrewDocuments: React.FC = () => {
+  const [expandedCrew, setExpandedCrew] = useState<string | null>(null);
+  const [approvedDocs, setApprovedDocs] = useState<number[]>([]);
+  const [rejectedDocs, setRejectedDocs] = useState<number[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
+  const [selectedPdfUrl, setSelectedPdfUrl] = useState<string>(samplePdf);
+  const [extractedData, setExtractedData] = useState<{ type?: string; name?: string }>({});
+  const [showPreview, setShowPreview] = useState(false);
+  const [comment, setComment] = useState("");
+
+  const crewList = Array.from(new Set(mockData.map((doc) => doc.crewName)));
+
+  const getPendingDocs = (crewName: string) =>
+    mockData.filter((doc) => doc.crewName === crewName && !approvedDocs.includes(doc.id) && !rejectedDocs.includes(doc.id));
+
+  const totalPending = mockData.length - approvedDocs.length - rejectedDocs.length;
+
+  const filteredCrewList = crewList.filter((name) =>
+    name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  function handleApprove() {
+    if (selectedDocId !== null) {
+      setApprovedDocs((prev) => [...prev, selectedDocId]);
+      setComment("");
+    }
+  }
+
+  function handleReject() {
+    if (selectedDocId !== null) {
+      setRejectedDocs((prev) => [...prev, selectedDocId]);
+      setComment("");
+    }
+  }
+
+  return (
+    <div className="p-6 bg-white rounded-lg shadow-md">
+      <div className="mb-4 flex gap-4">
+        <div className="bg-yellow-100 border-l-4 border-yellow-400 p-4 rounded w-1/3">
+          <h3 className="text-lg font-semibold text-yellow-700">Pending Documents</h3>
+          <p className="text-2xl font-bold text-yellow-800">{totalPending}</p>
+        </div>
+      </div>
+
+      <div className="p-[3px] rounded-full bg-gradient-to-r from-yellow-400 via-red-500 via-green-400 to-blue-500 animate-glow">
+        <input
+          type="text"
+          placeholder="Ask Anything with AI mode..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full pr-32 pl-4 py-3 text-sm text-black bg-white rounded-full focus:outline-none"
+        />
+      </div>
+
+      <table className="w-full mt-3 table-auto rounded-md border border-[#000099]">
+        <thead className="bg-[#e6f0ff] text-[#000099]">
+          <tr>
+            <th className="px-4 py-2 text-left">Crew Name</th>
+            <th className="px-4 py-2 text-left">Upload Date</th>
+            <th className="px-4 py-2 text-left">Documents</th>
+            <th className="px-4 py-2 text-left">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredCrewList.map((crewName) => {
+            const docs = getPendingDocs(crewName);
+            const allApproved = docs.length === 0;
+
+            return (
+              <React.Fragment key={crewName}>
+                <tr className="border-t">
+                  <td className="px-4 py-2">{crewName}</td>
+                  <td className="px-4 py-2">{docs[0]?.uploadDate || "-"}</td>
+                  <td className="px-4 py-2">
+                    <button
+                      onClick={() => setExpandedCrew(expandedCrew === crewName ? null : crewName)}
+                      className="text-[#000099] underline"
+                    >
+                      {docs.length} Document{docs.length !== 1 ? "s" : ""}
+                    </button>
+                  </td>
+                  <td className="px-4 py-2">
+                    {allApproved ? (
+                      <div className="flex items-center gap-2 text-green-600 font-semibold">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Approved
+                      </div>
+                    ) : (
+                      <span className="text-yellow-600 font-medium">Pending</span>
+                    )}
+                  </td>
+                </tr>
+                {expandedCrew === crewName && (
+                  <tr>
+                    <td colSpan={4} className="bg-gray-50 border-t border-b">
+                      <div className="flex flex-wrap gap-4">
+                        {docs.map((doc) => (
+                          <div
+                            key={doc.id}
+                            className="cursor-pointer min-w-[180px] flex flex-col items-center justify-between p-3 rounded border shadow-sm"
+                            onClick={() => {
+                              setSelectedPdfUrl(doc.pdfUrl || samplePdf);
+                              setExtractedData({ type: doc.documentType, name: doc.name });
+                              setSelectedDocId(doc.id);
+                              setShowPreview(true);
+                            }}
+                          >
+                            <div className="text-red-600 mb-2">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6zm7 1.5L18.5 9H13a1 1 0 0 1-1-1V3.5zM8 13h1v5H8v-5zm2.5 0h1.5a1.5 1.5 0 0 1 0 3H10.5v-3zm3.5 0h1v5h-1v-5z" />
+                              </svg>
+                            </div>
+                            <span className="text-center font-medium text-sm mb-2">{doc.documentType}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {showPreview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg w-[90%] max-w-6xl h-[80vh] flex overflow-hidden">
+            <div className="w-1/2 bg-gray-100 p-4 flex items-center justify-center">
+              <iframe
+                src={selectedPdfUrl}
+                title="PDF Preview"
+                className="w-full h-full border rounded"
+                style={{ minHeight: "400px" }}
+              />
+            </div>
+            <div className="w-1/2 p-6 flex flex-col">
+              <div className="border rounded bg-gray-50 p-4 mb-6">
+                <div className="font-bold mb-2">Extracted Data</div>
+                <div className="mb-1">Type: {extractedData.type}</div>
+                <div>Name: {extractedData.name}</div>
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-1">Comment</label>
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  className="w-full border rounded p-2 h-24 resize-none"
+                  placeholder="Add your comment here..."
+                />
+              </div>
+              <div className="flex justify-end space-x-4">
+                <button
+                  onClick={() => {
+                    handleApprove();
+                    setShowPreview(false);
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => {
+                    handleReject();
+                    setShowPreview(false);
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default CrewDocuments;
