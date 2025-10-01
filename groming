@@ -1,0 +1,665 @@
+import React, { useEffect, useState } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell,Line,LineChart
+} from 'recharts';
+import CountUp from 'react-countup';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { Search, Filter, Pencil, Trash,Eye, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
+import axios from 'axios';
+
+
+type Grooming = {
+  iga: string;
+  flight: string;
+  route: string;
+  name:string; 
+  date: string;
+  check: boolean;
+};
+//REMOVE this block when we have the original data source
+const allReports: Grooming[] = [
+  { iga: 'IGA9748', flight: 'EK-503', route: 'DEL-BOM', name: "Anamika Singh", date: '2025-07-18', check: false }, // Domestic
+  { iga: 'IGA9767', flight: 'EK-505', route: 'DXB-BOM', name: "Radha Sharma", date: '2025-08-26', check: true }, // International
+  { iga: 'IGA9742', flight: 'EK-142', route: 'BLR-HYD', name: "Neha Kapoor", date: '2025-06-10', check: false }, // Domestic
+  { iga: 'IGA9748', flight: 'EK-142', route: 'BLR-HYD', name: "Neha Kapoor", date: '2025-06-10', check: false }, // Domestic
+  { iga: 'IGA9777', flight: 'EK-503', route: 'DXB-SYD', name: "Anamika Singh", date: '2025-07-18', check: true }, // International
+  { iga: 'IGA9785', flight: 'EK-732', route: 'MAA-CCU', name: "Riya Singh", date: '2025-07-24', check: false }, // Domestic
+  { iga: 'IGA9798', flight: 'EK-505', route: 'DXB-BOM', name: "Radha Sharma", date: '2025-07-01', check: true }, // International
+  { iga: 'IGA9790', flight: 'EK-732', route: 'DXB-JFK', name: "Neha Kapoor", date: '2025-06-10', check: false }, // International
+  { iga: 'IGA9756', flight: 'EK-215', route: 'DEL-GOI', name: "Anamika Singh", date: '2025-08-21', check: true }, // Domestic
+  { iga: 'IGA9750', flight: 'EK-142', route: 'DXB-IST', name: "Radha Sharma", date: '2025-08-14', check: true }, // International
+  { iga: 'IGA9763', flight: 'EK-503', route: 'PNQ-GOI', name: "Neha Kapoor", date: '2025-06-27', check: true }, // Domestic
+  { iga: 'IGA9760', flight: 'EK-142', route: 'DXB-FRA', name: "Anamika Singh", date: '2025-08-03', check: false }, // International
+  { iga: 'IGA9743', flight: 'EK-215', route: 'DEL-BLR', name: "Anamika Singh", date: '2025-06-20', check: true }, // Domestic
+  { iga: 'IGA9710', flight: 'EK-789', route: 'DXB-SIN', name: "Radha Sharma", date: '2025-09-02', check: true }, // International
+  { iga: 'IGA9542', flight: 'EK-732', route: 'DXB-CDG', name: "Neha Kapoor", date: '2025-07-21', check: false }, // International
+  { iga: 'IGA9741', flight: 'EK-183', route: 'DEL-CCU', name: "Anamika Singh", date: '2025-07-16', check: false }, // Domestic
+  { iga: 'IGA9728', flight: 'EK-301', route: 'DXB-SIN', name: "Riya Singh", date: '2025-06-13', check: false }, // International
+  { iga: 'IGA9449', flight: 'EK-732', route: 'DXB-FRA', name: "Radha Sharma", date: '2025-08-09', check: false }, // International
+  { iga: 'IGA2248', flight: 'EK-621', route: 'DEL-MAA', name: "Anamika Singh", date: '2025-08-11', check: false }, // Domestic
+  { iga: 'IGA7743', flight: 'EK-142', route: 'DXB-SIN', name: "Riya Singh", date: '2025-06-30', check: false }, // International
+  { iga: 'IGA9740', flight: 'EK-402', route: 'DEL-BOM', name: "Radha Sharma", date: '2025-07-27', check: true } // Domestic
+];
+
+
+
+// const crewData = [
+//   { igaCode: "IGA001", name: "Amit Sharma", filled: 5 },
+//   { igaCode: "IGA002", name: "Neha Verma", filled: 4 },
+//   { igaCode: "IGA003", name: "Ravi Singh", filled: 3 },
+//   { igaCode: "IGA004", name: "Priya Mehta", filled: 5 },
+//   { igaCode: "IGA005", name: "Karan Joshi", filled: 2 },
+// ];
+
+const Grooming: React.FC = () => 
+{
+  const role = localStorage.getItem("userRole") || "Guest";
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [viewFilter, setViewFilter] = useState("last30");
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const reportsPerPage = 20;
+  const [expandedname, setExpandedname] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [categoryData, setCategoryData] = useState([]);
+  // const [groomingData, setGroomingData] = useState([]);
+  
+const [chartData, setChartData] = useState([]);
+const[loading,setLoading]=useState(false);
+const [dailyData, setDailyData] = useState([]);
+const [allGrooomingdata,setAllGroomingData] = useState([]);
+ const [rawData, setRawData] = useState<any>(null);
+ const [groomedTableData, setGroomedTableData] = useState([]);
+const [nonGroomedTableData, setNonGroomedTableData] = useState([]);
+
+const API_URL = "https://6e-ifs-grooming-be-dev.goindigo.in/v1/insights";
+
+
+const fetchAllDataOnce = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(API_URL);
+      const data = await response.json();
+      console.log("dataaa",data)
+      setRawData(data); // Store raw data for reuse
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+ // Process chart data
+  const processChartData = (data: any) => {
+    const dailyData = data.trends.daily;
+    console.log("sdfdvghbnj",dailyData)
+    const totalCompliant = dailyData.reduce((sum: number, item: any) => sum + item.compliant, 0);
+    const totalNonCompliant = dailyData.reduce((sum: number, item: any) => sum + item.nonCompliant, 0);
+
+    setChartData([
+      { name: "Compliant", value: totalCompliant },
+      { name: "Non-Compliant", value: totalNonCompliant }
+    ]);
+  };
+
+  // Process category report
+  const processCategoryReport = (data: any) => {
+    const formattedData = data.categories.map((item: any) => ({
+      name: item.category,
+      value: item.nonCompliantCount
+    }));
+    setCategoryData(formattedData);
+  };
+
+  // Process date-wise chart
+  const processDateWiseChartData = (data: any) => {
+    const linechartData = data.trends.daily.map((item: any) => ({
+      date: item.date,
+      Compliance: item.compliant,
+      NonCompliance: item.nonCompliant
+    }));
+    setDailyData(linechartData);
+  };
+
+  // Process grooming data
+  const processAllGroomingData = (data: any) => {
+    const allData = data.recentTests.items.map((item: any) => ({
+      crewId: item.crewId,
+      crewName: item.crewName,
+      takenAt: new Date(item.takenAt).toLocaleString(),
+      status: item.status
+    }));
+    setAllGroomingData(allData);
+  };
+
+  const processCrewDataOnce = (data : any) => {
+    const groomed = data?.top?.groomed || [];
+    const nonGroomed = data?.top?.nonGroomed || [];
+
+    const groomedFormatted = groomed.map(item => ({
+      crewId: item.crewId,
+      crewName: item.crewName,
+      avgScore: item.avgScore,
+    }));
+
+    const nonGroomedFormatted = nonGroomed.map(item => ({
+      crewId: item.crewId,
+      crewName: item.crewName,
+      avgScore: item.avgScore,
+    }));
+
+    setGroomedTableData(groomedFormatted);
+    setNonGroomedTableData(nonGroomedFormatted);
+  } 
+
+
+  
+useEffect(() => {
+  fetchAllDataOnce();
+}, []);
+
+
+    useEffect(() => {
+    if (rawData) {
+      processChartData(rawData);
+      processCategoryReport(rawData);
+      processDateWiseChartData(rawData);
+      processAllGroomingData(rawData);
+      processCrewDataOnce(rawData);
+    }
+  }, [rawData]);
+
+
+  
+
+  
+
+  const [filter1, setFilter1] = useState("monthly");
+const pieColors1 = ["#000099", "#cb2229"]; //for first piechart
+const piecolor2 = [    
+  "#0088FE", "#cb2229", "#FFBB28", "#FF8042",
+  "#A28EFF", "#FF6699", "#33CCFF", "#cb2229"
+];
+// const piecolor3=[
+//   "#0088FE", "#ff7830", "#FFBB28", "#FF8042",
+// ]
+
+
+// const issuecategories = {
+//   ALL:[
+//  { name: 'Uniform Issues', value: Math.floor(Math.random() * 100) + 10 },
+//   { name: 'Nail Issues', value: Math.floor(Math.random() * 100) + 10 },
+//   { name: 'Hairstyle Issues', value: Math.floor(Math.random() * 100) + 10 },
+//   { name: 'Makeup Issues', value: Math.floor(Math.random() * 100) + 10 },
+//   { name: 'Accessories Issues', value: Math.floor(Math.random() * 100) + 10 },
+
+// ],
+//    Domestic:[
+//   { name: 'Uniform Issues', value: Math.floor(Math.random() * 100) + 10 },
+//   { name: 'Nail Issues', value: Math.floor(Math.random() * 100) + 10 },
+//   { name: 'Hairstyle Issues', value: Math.floor(Math.random() * 100) + 10 },
+//   {name:"Delay on flight",value: Math.floor(Math.random() * 100) + 10},
+//    ],
+//    International:[
+//   { name: 'Nail Issues', value: Math.floor(Math.random() * 100) + 10 },
+//   { name: 'Hairstyle Issues', value: Math.floor(Math.random() * 100) + 10 },
+// //   {name:"Catering Issues",value: Math.floor(Math.random() * 100) + 10},
+
+// ],
+// };
+
+// const sectorData = {
+//   ALL: [
+//     { name: "DEL → BOM", value: 400 },
+//     { name: "BLR → HYD", value: 300 },
+//     { name: "MAA → CCU", value: 200 },
+//     { name: "GOI → PNQ", value: 100 },
+//     { name: "LON → BKK", value: 350 },
+//     { name: "NYC → DXB", value: 250 },
+//     { name: "SYD → SIN", value: 150 },
+//     { name: "CDG → FRA", value: 180 },
+//   ],
+//   Domestic: [
+//     { name: "DEL → BOM", value: 400 },
+//     { name: "BLR → HYD", value: 300 },
+//     { name: "MAA → CCU", value: 200 },
+//     { name: "GOI → PNQ", value: 100 },
+//   ],
+//   International: [
+//     { name: "LON → BKK", value: 350 },
+//     { name: "NYC → DXB", value: 250 },
+//     { name: "SYD → SIN", value: 150 },
+//     { name: "CDG → FRA", value: 180 },
+//   ],
+// };
+
+
+  const filterReportsByView = (): Grooming[] => {
+    const now = new Date();
+    let filtered = [...allReports];
+
+    if (viewFilter === "lastWeek") {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      filtered = filtered.filter(r => new Date(r.date) >= weekAgo);
+    } else if (viewFilter === "lastMonth") {
+      const monthAgo = new Date(now);
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+      filtered = filtered.filter(r => new Date(r.date) >= monthAgo);
+    } else if (viewFilter === "last30") {
+      const ninetyAgo = new Date(now);
+      ninetyAgo.setDate(ninetyAgo.getDate() - 90);
+      filtered = filtered.filter(r => new Date(r.date) >= ninetyAgo);
+    } else if (viewFilter === "custom" && startDate && endDate) {
+      const diff = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+      if (diff <= 90) {
+        filtered = filtered.filter(r => {
+          const d = new Date(r.date);
+          return d >= startDate && d <= endDate;
+        });
+      }
+    }
+
+
+    return filtered;
+  };
+  
+
+
+//for reminder
+const sendReminderEmail = (name: string, count: number) => {
+  // Simulate sending an email reminder
+  alert(`Reminder sent to ${name} for ${count} non compliance reports.`);
+
+  // You can replace this with an actual API call later
+  console.log(`Email reminder triggered for ${name} with ${count} pending reports.`);
+};
+
+
+  const reports = filterReportsByView();
+  const checkCount = reports.filter(r => r.check).length;
+  const notcheckCount = reports.length - checkCount;
+  const [filter, setFilter] = useState("ALL");
+
+  const filteredReports = reports.filter((report) => {
+  const query = searchQuery.toLowerCase();
+  return (
+    report.iga.toLowerCase().includes(query) ||
+    report.flight.toLowerCase().includes(query) ||
+    // report.route.toLowerCase().includes(query) ||
+    report.name.toLowerCase().includes(query) ||
+    report.date.toLowerCase().includes(query)
+  );
+});
+const topCompliantCrew = [
+  { igaCode: "IGA001", name: "Amit Sharma", issues: "18/20"},
+  { igaCode: "IGA002", name: "Neha Verma", issues: "17/20" },
+  { igaCode: "IGA003", name: "Ravina Singh", issues: "16/20"},
+  { igaCode: "IGA004", name: "Priya Mehta", issues: "15/20" },
+  { igaCode: "IGA005", name: "Radha sharma", issues: "14/20"},
+];
+
+const NonCompliantCrew = [
+  { igaCode: "IGA001", name: "Amit Sharma", issues: "9/20" },
+  { igaCode: "IGA002", name: "Neha Verma", issues: "8/20" },
+  { igaCode: "IGA003", name: "Ravina Singh", issues: "5/20" },
+  { igaCode: "IGA004", name: "Priya Mehta", issues: "2/20" },
+  { igaCode: "IGA005", name: "Radha sharma", issues: "6/20" },
+];
+
+
+const indexOfLastReport = currentPage * reportsPerPage;
+const indexOfFirstReport = indexOfLastReport - reportsPerPage;
+const currentReports = filteredReports.slice(indexOfFirstReport, indexOfLastReport);
+
+
+// useEffect(() => {
+//     const delayDebounce = setTimeout(() => {
+//       if (query.trim() !== "") {
+//         fetchSearching(query);
+//       } else {
+//         setResults([]);
+//         setResultData([]);
+//       }
+//     }, 1200);
+
+//     return () => clearTimeout(delayDebounce);
+//   }, [query]);
+
+
+const getApprovalColor = (status: string): string =>
+  status === 'COMPLIANT'
+    ? 'status-badge bg-green-100 text-green-800'
+    : 'status-badge bg-red-100 text-red-800';
+
+  return (
+    <div className="animate-fade-in">
+      {/* Header and View Filter */}
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-aviation-secondary">Grooming Reports</h1>
+          <p className="text-muted-foreground">Review and manage grooming reports</p>
+        </div>
+      </div>
+
+      <div className="relative w-full px-2 mb-8">
+    <div className="p-[3px] rounded-full bg-gradient-to-r from-yellow-400 via-red-500 via-green-400 to-blue-500 animate-glow">
+    <input
+      type="text"
+      placeholder="Ask Anything with AI mode..."
+      value={query}
+      onChange={(e) => setQuery(e.target.value)}
+      className="w-full pr-32 pl-4 py-3 text-sm text-black bg-white rounded-full focus:outline-none"
+    />
+  </div>
+
+  {query && (
+    <button
+      onClick={() => console.log("Generate clicked with:", query)}
+      className="absolute right-3 top-1/2 -translate-y-1/2 px-4 py-1.5 
+                 text-sm font-bold text-transparent bg-clip-text 
+                 bg-gradient-to-r from-yellow-100 to-[#000099] 
+                 flex items-center gap-1 rounded-full border-2 border-transparent 
+                 transition"
+    >
+      <span className=" text-yellow-400">✨</span>
+      Ask
+    </button>
+  )}
+</div>
+    <div className="flex flex-wrap gap-3">
+      {/* Pie Chart 1*/}
+       <div className="aviation-card px-3 py-2 bg-white rounded-lg shadow-md text-center w-full md:w-[49%] border"
+      style={{ borderColor: "#000099", borderWidth: "2px" }}>
+      <div className="flex justify-between items-center mb-2">
+        <p className="text-lg text-[#000099] font-semibold">Compliant Status</p>
+      </div>
+
+      <ResponsiveContainer width="100%" height={200}>
+        <PieChart>
+          <Pie
+            data={chartData}
+            dataKey="value"
+            nameKey="name"
+            outerRadius={60}
+            label={({ name }) => name}
+          >
+            {chartData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={pieColors1[index]} />
+            ))}
+          </Pie>
+          <Tooltip />
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
+
+  {/* issue by Categories Pie Chart */}
+
+  <div className="aviation-card p-4 bg-white rounded-lg shadow-md text-center w-full md:w-[49%] border"
+      style={{ borderColor: "#000099", borderWidth: "2px" }}>
+      <div className="flex justify-between items-center mb-2">
+        <p className="text-lg text-[#000099] font-semibold">Report by Categories</p>
+      </div>
+
+      <div className="px-4">
+        {loading ? (
+          <p className="text-sm text-gray-500">Loading chart...</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={200} style={{ padding: "2px", fontSize: "10px" }}>
+            <PieChart>
+              <Pie
+                data={categoryData}
+                dataKey="value"
+                nameKey="name"
+                outerRadius={60}
+                label={({ name }) => name}
+              >
+                {categoryData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={piecolor2[index % piecolor2.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+
+  </div>
+
+   {/* Line Chart */}
+<div className="aviation-card p-4 mb-6 mt-3 border" style={{ borderColor: "#000099", borderWidth: "2px" }}>
+  <div className="flex justify-between items-center mb-4">
+    <h2 className="text-lg font-semibold text-[#000099]">Report Summary by Date</h2>
+  </div>
+
+  <ResponsiveContainer width="100%" height={300}>
+    <LineChart data={dailyData}>
+      <CartesianGrid strokeDasharray="3 3" />
+      <XAxis dataKey="date" />
+      <YAxis />
+      <Tooltip />
+      <Legend />
+      <Line
+        type="monotone"
+        dataKey="Compliance"
+        stroke="#000099"
+        name="Compliance"
+        strokeWidth={2}
+      />
+      <Line
+        type="monotone"
+        dataKey="NonCompliance"
+        stroke="#cb2229"
+        name="Non Compliance"
+        strokeWidth={2}
+      />
+    </LineChart>
+  </ResponsiveContainer>
+</div>
+
+
+
+<div className="flex flex-wrap gap-3 justify-between">
+  {/* Compliance Card */}
+  <div className="aviation-card px-3 py-2 bg-white rounded-lg shadow-md text-center w-[100%] md:w-[49%] border"
+  style={{ borderColor: "#000099", borderWidth: "2px" }}>
+    <h2 className="text-lg text-left font-semibold text-[#000099] mb-4">
+      Top 5 Compliant Crew Members 
+    </h2>
+    <table className="min-w-full text-sm text-left border border-gray-200">
+      <thead className="bg-[#000099] text-white">
+        <tr>
+          <th className="px-4 py-2">IGA Code</th>
+          <th className="px-4 py-2">Crew Name</th>
+          <th className="px-4 py-2">Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        {groomedTableData.map((crew, index) => (
+          <tr key={index} className="border-t border-gray-200">
+            <td className="px-4 py-2">{crew.crewId}</td>
+            <td className="px-4 py-2">{crew.crewName}</td>
+            <td className="px-4 py-2">{crew.avgScore}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  {/* Non-Compliance Card */}
+  <div className="aviation-card px-3 py-2 bg-white rounded-lg shadow-md text-center w-[100%] md:w-[49%] border"
+   style={{ borderColor: "#000099", borderWidth: "2px" }}>
+    <h2 className="text-lg text-left font-semibold text-[#000099] mb-4">
+      Top 5 Non Compliant Crew Members 
+    </h2>
+    <table className="min-w-full text-sm text-left border border-gray-200">
+      <thead className="bg-[#000099] text-white">
+        <tr>
+          <th className="px-4 py-2">IGA Code</th>
+          <th className="px-4 py-2">Crew Name</th>
+          <th className="px-4 py-2"> Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        {nonGroomedTableData.map((crew, index) => (
+          <tr key={index} className="border-t border-gray-200">
+            <td className="px-4 py-2">{crew.crewId}</td>
+            <td className="px-4 py-2">{crew.crewName}</td>
+            <td className="px-4 py-2">{crew.avgScore}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+
+
+  
+{/*AI will analyse the pattern later on through name,date for the crew member then he /she send the strict reminder on 
+there profile for the report and then take actions*/}
+
+      {/* Search and Table */}
+   
+    <div className="aviation-card p-2 mb-6 mt-3 border"
+    style={{ borderColor: "#000099", borderWidth: "2px" }}>
+           <div className="p-4 border-b border-border">
+             <div className="flex flex-col md:flex-row gap-4 relative">
+               <div className="flex-1 relative">
+                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
+                 <input
+                   type="text"
+                   placeholder="Search by IGA/name.."
+                   value={searchQuery}
+                   onChange={(e) => setQuery(e.target.value)}
+                   className="w-full pl-10 pr-4 py-2 border border-border rounded-md focus:ring-2 focus:ring-aviation-primary focus:border-aviation-primary"
+                 />
+               </div>
+             </div>
+           </div>
+            
+           {  filteredReports.some(r => r.name.toLowerCase().trim() === searchQuery.toLowerCase().trim() && !r.check) && (
+          <div
+            className="aviation-card p-4 mb-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-md animate-fade-in transition-all duration-500 ease-in-out">
+            {(() => {
+             const ldeReports = filteredReports.filter(
+            (r) => r.name.toLowerCase().trim() == searchQuery.toLowerCase().trim() && !r.check
+          );
+         if (ldeReports.length > 0) {
+           return (
+             <div className="flex flex-col gap-3">
+               {/* Header with icon and label */}
+               <div className="flex items-center gap-2 text-yellow-800 font-semibold text-sm">
+                 <span className="text-lg">✨</span>
+                 <span>AI Summary:</span>
+               </div>
+   
+               {/* Warning message with double-click */}
+               <div className="flex justify-between items-center">
+                 <p
+                   className="text-sm text-yellow-800 cursor-pointer hover:underline"
+                   onDoubleClick={() => setExpandedname(searchQuery)}
+                 >
+                   <strong>{searchQuery}</strong> has been Non-Compliant <strong>{ldeReports.length}/20 </strong>checks in last 30 Days.
+                   {/* <span className="ml-2 text-xs text-gray-500">(Double-click to view dates)</span> */}
+                 </p>
+   
+                 {/* Prominent Reminder Button */}
+                 <button
+                   onClick={() => sendReminderEmail(searchQuery, ldeReports.length)}
+                   className="px-4 py-2 bg-gradient-to-r from-[#000099] to-blue-600 text-white font-semibold rounded-md shadow-md hover:scale-105 hover:shadow-lg transition-transform duration-300"
+                 >
+                   🚀 Send Reminder
+                 </button>
+               </div>
+   
+               {/* Show unfilled dates in red */}
+               {expandedname === searchQuery && (
+                 <ul className="list-disc list-inside text-red-700 text-sm mt-2 animate-fade-in">
+                   {ldeReports.map((r) => (
+                     <li key={r.iga}>{r.date}</li>
+                   ))}
+                 </ul>
+               )}
+             </div>
+           );
+         }
+       }
+      )()}
+     </div>
+  )}
+   
+   
+   
+           {/*Reports Table */}
+   
+           <div className="overflow-x-auto">
+             <table className="w-full">
+               <thead className="bg-aviation-surface">
+                 <tr>
+                  <th className="px-6 py-3 text-left text-xs text-aviation-muted uppercase tracking-wider">Date</th>
+                   <th className="px-6 py-3 text-left text-xs text-aviation-muted uppercase tracking-wider">IGA-Code</th>
+                  <th className="px-6 py-3 text-left text-xs text-aviation-muted uppercase tracking-wider">Name</th>
+                   <th className="px-6 py-3 text-left text-xs text-aviation-muted uppercase tracking-wider">Status</th>
+                   <th className="px-6 py-3 text-left text-xs text-aviation-muted uppercase tracking-wider">Actions</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-border">
+                 {allGrooomingdata.map((report) => (
+                   <tr key={report.iga} className="hover:bg-aviation-surface transition-colors">
+                    <td className="px-6 py-4">
+                     {new Date(report.takenAt).toLocaleDateString('en-GB')}
+                    </td>
+                     <td className="px-6 py-4 font-mono text-sm">{report.crewId}</td>
+                     <td className="px-6 py-4">{report.crewName}</td>
+                     
+
+                     <td className="px-6 py-4">
+                       <span className={getApprovalColor(report.status)}>
+                         {report.status }
+                       </span>
+                     </td>
+                     <td className="px-6 py-4">
+                       <div className="flex space-x-2">
+                         {role === "Admin" && (
+                           <>
+                             <button className="p-1 rounded-md hover:bg-blue-200 transition">
+                               <Pencil className="h-4 w-4 text-blue-700" />
+                             </button>
+                             <button className="p-1 rounded-md hover:bg-red-200 transition">
+                               <Trash className="h-4 w-4 text-red-700" />
+                             </button>
+                           </>
+                         )}
+                         <button className="p-1 rounded-md hover:bg-blue-200 transition">
+                           <Eye className="h-4 w-4 text-blue-700" />
+                         </button>
+                         <button className="p-1 rounded-md hover:bg-blue-200 transition">
+                           <Download className="h-4 w-4 text-blue-700" />
+                         </button>
+                       </div>
+                     </td>
+   
+                   </tr>
+   
+                 ))}
+               </tbody>
+             </table>
+           </div>
+          
+       </div>
+  </div>
+  );
+};
+export default Grooming;
+
+
+
