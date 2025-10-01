@@ -1,0 +1,40 @@
+// ================= NEW STATES =================
+const [selectedFilter, setSelectedFilter] = useState("last2weeks");
+const [customStart, setCustomStart] = useState<Date | null>(null);
+const [customEnd, setCustomEnd] = useState<Date | null>(null);
+
+// ================= API URLs =================
+const API_ENDPOINTS: Record<string, string> = {
+  last2weeks: `${API_URL}/last-2-weeks`,
+  lastMonth: `${API_URL}/last-month`,
+  custom: `${API_URL}/custom`
+};
+
+// ================= FETCH BASED ON FILTER =================
+const fetchFilteredData = async () => {
+  setLoading(true);
+  try {
+    let url = API_ENDPOINTS[selectedFilter];
+
+    // For custom range, append query params
+    if (selectedFilter === "custom" && customStart && customEnd) {
+      const start = customStart.toISOString().split("T")[0];
+      const end = customEnd.toISOString().split("T")[0];
+      url = `${API_ENDPOINTS.custom}?start=${start}&end=${end}`;
+    }
+
+    const response = await axios.get(url);
+    const data = response.data;
+
+    setRawData(data); // same processing as before
+  } catch (error) {
+    console.error("Error fetching filtered data:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+// ================= REFETCH WHEN FILTER CHANGES =================
+useEffect(() => {
+  fetchFilteredData();
+}, [selectedFilter, customStart, customEnd]);
