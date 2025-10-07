@@ -1,0 +1,363 @@
+import React, { useState, useEffect } from 'react';
+import { Document, Page, pdfjs } from 'react-pdf';
+
+const documentTypes = [
+  "LATEST PASSPORT (Front and Back)",
+  "CREW ID CARD (Front and Back)",
+  "TRANSFER LETTER",
+  "INITIAL CREW CONTRACT",
+  "RENEWAL CREW CONTRACT",
+  "PROMOTION LETTER",
+  "PHOTOGRAPH PASSPORT SIZE",
+  "EDUCATION CERTIFICATE",
+  "AADHAR CARD",
+  "PAN CARD"
+];
+
+const steps = [
+  "Extracting Document Details",
+  "Verifying with AI",
+  "Finalizing Data"
+];
+
+const UploadDocuments = () => {
+  const [selectedDoc, setSelectedDoc] = useState('');
+  const [file, setFile] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [uploadHistory, setUploadHistory] = useState([]);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [loadingPdf, setLoadingPdf] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [fileUrl, setFileUrl] = useState(null);
+  const [fileType, setFileType] = useState(null);
+  const [currentStep, setCurrentStep] = useState(steps[0]);
+
+  // NEW: State for extracted data and error
+  const [extractedData, setExtractedData] = useState(null);
+  const [extractError, setExtractError] = useState(null);
+
+  // File change handler
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    setFile(file);
+    setLoadingPdf(true);
+    const fileURL = URL.createObjectURL(file);
+    setTimeout(() => {
+      setFileUrl(fileURL);
+      setLoadingPdf(false);
+    }, 100);
+  };
+
+  const crewDocuments = [
+    {
+      name: "My Documents",
+      documents: [
+        { name: "Latest Passport", status: "Pending" },
+        { name: "Aadhar Card", status: "Pending" },
+        { name: "Crew-ID Card ", status: "Uploaded" },
+      ],
+    },
+  ];
+
+  useEffect(() => {
+    return () => {
+      if (fileUrl) URL.revokeObjectURL(fileUrl);
+    };
+  }, [fileUrl]);
+
+  // API integration for extracting data
+  const extractDataFromDocument = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const response = await fetch('/api/extract', { // TODO: Replace with actual API URL
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) throw new Error('Extraction failed');
+      const result = await response.json();
+      setExtractedData(result.data);
+      setExtractError(null);
+
+      // Update upload history based on extraction
+      const newEntry = {
+        documentName: selectedDoc,
+        documentId: result.data?.documentId || `DOC-${Date.now()}`,
+        status: "Pending Admin Approval", // Or from API: result.data?.status
+        expiryDate: result.data?.expiryDate || '—',
+        uploadDate: new Date().toLocaleDateString(),
+      };
+      setUploadHistory(prev => [...prev, newEntry]);
+
+    } catch (err) {
+      setExtractedData(null);
+      setExtractError(err.message || 'Extraction failed');
+    }
+  };
+
+  // Upload handler — trigger API extraction and show modal with animation
+  const handleUpload = async () => {
+    if (selectedDoc && file) {
+      setExtractedData(null); // Reset extraction result
+      setExtractError(null);  // Reset error
+      setLoadingPdf(true);
+      const fileURL = URL.createObjectURL(file);
+      setFileUrl(fileURL);
+      setLoadingPdf(false);
+
+      setIsVerifying(true);
+      setShowModal(true);
+      setProgress(0);
+      setCurrentStep(steps[0]);
+
+      // Start extraction API in parallel with "verification" steps/progress
+      extractDataFromDocument(file);
+
+      let stepIndex = 0;
+      const interval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 100) {
+            clearInterval(interval);
+            setIsVerifying(false);
+            // Commented dummy data addition:
+            /*
+            const newEntry = {
+              documentName: selectedDoc,
+              documentId: `DOC-${Date.now()}`,
+              status: "Pending Admin Approval",
+              expiryDate: "—"
+            };
+            setUploadHistory([...uploadHistory, newEntry]);
+            */
+          } else {
+            if (prev % 33 === 0 && stepIndex < steps.length) {
+              setCurrentStep(steps[stepIndex]);
+              stepIndex++;
+            }
+          }
+          return prev + 5;
+        });
+      }, 200);
+    }
+  };
+
+  const handleVerifyAgain = () => {
+    setShowModal(false);
+    setSelectedDoc('');
+    setFile(null);
+    setProgress(0);
+    setIsVerifying(false);
+    setCurrentStep(steps[0]);
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Main upload controls */}
+      <div>
+        <h2 className="font-bold mb-2 text-lg">Upload the documents you want to Verify</h2>
+        <select
+          className="border rounded p-2"
+          value={selectedDoc}
+          onChange={(e) => setSelectedDoc(e.target.value)}
+        >
+          <option value="">Select Document Type</option>
+          {documentTypes.map(doc => (
+            <option key={doc} value={doc}>{doc}</option>
+          ))}
+        </select>
+        <input
+          type="file"
+          accept="image/*,application/pdf"
+          className="ml-4"
+          onChange={handleFileChange}
+        />
+        <button
+          className="ml-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+          onClick={handleUpload}
+          disabled={!selectedDoc || !file}
+        >
+          Upload & Extract
+        </button>
+      </div>
+
+      {/* History Table */}
+      <div>
+        <h3 className="font-semibold mb-2">Upload History</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="py-2 px-3 border">Document Name</th>
+                <th className="py-2 px-3 border">Document ID</th>
+                <th className="py-2 px-3 border">Last Upload</th>
+                <th className="py-2 px-3 border">Expiry Date</th>
+                <th className="py-2 px-3 border">Verification Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {uploadHistory.map((entry, i) => (
+                <tr key={i}>
+                  <td className="border px-3 py-1">{entry.documentName}</td>
+                  <td className="border px-3 py-1">{entry.documentId}</td>
+                  <td className="border px-3 py-1">{entry.uploadDate || '—'}</td>
+                  <td className="border px-3 py-1">{entry.expiryDate}</td>
+                  <td className="border px-3 py-1">{entry.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Pending Documents */}
+      <div className="bg-yellow-50 p-2 rounded mb-2 border border-yellow-300 text-yellow-700">
+        Alert: You have pending mandatory documents to upload.
+      </div>
+      <div>
+        <table className="text-sm w-72 border">
+          <thead>
+            <tr>
+              <th className="border p-1 bg-gray-100">My Documents</th>
+              <th className="border p-1 bg-gray-100">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {crewDocuments[0].documents.map((doc, idx) => (
+              <tr key={idx}>
+                <td className="border p-1">{doc.name}</td>
+                <td className="border p-1">{doc.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <span className="text-xs mt-1 text-gray-400 block">
+          Please ensure all pending documents are uploaded before verification.
+        </span>
+      </div>
+
+      {/* Modal for Extraction/Verification */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="relative bg-white p-6 rounded shadow-lg w-full max-w-4xl flex flex-col md:flex-row gap-6">
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute top-1 right-1 text-gray-600 hover:text-red-600"
+              title="Close"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            {/* Document Preview */}
+            <div className="w-1/2 relative border rounded p-2 h-64 overflow-hidden bg-gray-50 flex items-center justify-center">
+              {fileUrl && !loadingPdf && file?.type.includes('pdf') ? (
+                <iframe
+                  src={fileUrl}
+                  width="100%"
+                  height="400px"
+                  className="border rounded"
+                  title="PDF Preview"
+                />
+              ) : (
+                <>
+                  {fileUrl && (
+                    <img
+                      src={fileUrl}
+                      alt="Uploaded Document"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  )}
+                  {isVerifying && (
+                    <div className="absolute inset-0 z-10 pointer-events-none bg-white bg-opacity-50 flex items-center justify-center">
+                      <span className="text-sm text-gray-600">Verifying...</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* AI Verification Panel */}
+            <div className="w-1/2 flex-1">
+              <h3 className="text-lg font-semibold text-[#000099] mb-2 flex items-center gap-1">
+                AI Verification
+                <span className="flex items-center text-red-600 text-xs hover:scale-105 transition duration-100 font-semibold"> ✨</span>
+              </h3>
+              <div className="border rounded p-4 bg-gray-50 space-y-4">
+                {isVerifying ? (
+                  <>
+                    <div className="space-y-3">
+                      {steps.map((step, index) => {
+                        const stepProgress = (index + 1) * (100 / steps.length);
+                        const isCompleted = progress >= stepProgress;
+                        const isCurrent = progress < stepProgress && progress >= index * (100 / steps.length);
+                        return (
+                          <div key={index} className="flex items-center gap-2">
+                            {isCompleted ? (
+                              <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            ) : (
+                              <div className={`h-3 w-3 rounded-full ${isCurrent ? 'bg-indigo-600 animate-ping' : 'bg-gray-300'}`}></div>
+                            )}
+                            <span className={`text-sm ${isCompleted ? 'text-green-700 font-medium' : isCurrent ? 'text-indigo-700 font-semibold' : 'text-gray-500'}`}>
+                              {step}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Progress Bar */}
+                    <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
+                      <div
+                        className="bg-indigo-600 h-2 rounded-full transition-all duration-200"
+                        style={{ width: `${progress}%` }}
+                      ></div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-4">
+                    {/* Show extraction error if any */}
+                    {extractError ? (
+                      <div className="text-red-600">{extractError}</div>
+                    ) : extractedData ? (
+                      <div>
+                        <h4 className="font-semibold mb-2">Extracted Data</h4>
+                        <ul className="text-sm space-y-1">
+                          {/* AUTOMATIC extracted fields from API */}
+                          {Object.entries(extractedData).map(([key, value]) => (
+                            <li key={key}><span className="font-medium">{key}:</span> {String(value)}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <div className="text-gray-400">No data extracted.</div>
+                    )}
+
+                    {/* Dummy data block commented:
+                    <div>
+                      <p><strong>Document Type:</strong> {selectedDoc}</p>
+                      <p><strong>Crew Name:</strong> Ankit Yadav</p>
+                      <p><strong>Document No.:</strong> PA1234567</p>
+                      <p><strong>Expiry Date:</strong> 28 Sep 2031</p>
+                    </div>
+                    */}
+                  </div>
+                )}
+                <button
+                  className="mt-4 px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-700"
+                  onClick={handleVerifyAgain}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+export default UploadDocuments;
